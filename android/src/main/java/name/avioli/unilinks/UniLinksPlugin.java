@@ -1,37 +1,33 @@
 package name.avioli.unilinks;
 
 import android.app.Activity;
+import android.content.Intent;
+import android.net.Uri;
 import androidx.annotation.NonNull;
 
 import io.flutter.embedding.engine.plugins.FlutterPlugin;
 import io.flutter.embedding.engine.plugins.activity.ActivityAware;
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding;
 import io.flutter.plugin.common.BinaryMessenger;
+import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
-import io.flutter.plugin.common.PluginRegistry;
-import io.flutter.plugin.common.PluginRegistry.Registrar;
+import io.flutter.plugin.common.MethodChannel.MethodCallHandler;
+import io.flutter.plugin.common.MethodChannel.Result;
 
 /**
- * Minimal v2-compatible plugin implementation that also provides a v1-style registerWith
- * for projects still using the old embedding.
+ * UniLinksPlugin - Flutter Android embedding v2 only implementation.
  *
- * NOTE: This is a minimal skeleton mostly to fix the compile error. If the plugin has
- * additional functionality (intent handling, streams, etc.) you should port that logic here
- * as needed.
+ * Note:
+ * - This version deliberately does NOT reference PluginRegistry.Registrar (v1 API)
+ *   so it compiles with newer Flutter/Gradle toolchains.
+ * - If you need to preserve a v1 registerWith signature for older apps,
+ *   consider upgrading your project to the v2 embedding or forking the plugin.
  */
-public class UniLinksPlugin implements FlutterPlugin, ActivityAware {
+public class UniLinksPlugin implements FlutterPlugin, ActivityAware, MethodCallHandler {
   private MethodChannel channel;
   private Activity activity;
 
-  // v1 embedding registration (keeps compatibility)
-  @SuppressWarnings("deprecation")
-  public static void registerWith(Registrar registrar) {
-    UniLinksPlugin plugin = new UniLinksPlugin();
-    plugin.activity = registrar.activity();
-    plugin.setupChannel(registrar.messenger());
-  }
-
-  // v2 embedding
+  // Called when plugin is attached to engine (v2)
   @Override
   public void onAttachedToEngine(@NonNull FlutterPluginBinding binding) {
     setupChannel(binding.getBinaryMessenger());
@@ -42,10 +38,12 @@ public class UniLinksPlugin implements FlutterPlugin, ActivityAware {
     tearDownChannel();
   }
 
-  // ActivityAware callbacks to keep track of Activity if needed by plugin logic
+  // ActivityAware implementations to keep a reference to the Activity for intents
   @Override
   public void onAttachedToActivity(@NonNull ActivityPluginBinding binding) {
     this.activity = binding.getActivity();
+    // Optional: handle the intent that started the activity
+    // You can forward the initial intent URI to Dart on attach if needed
   }
 
   @Override
@@ -63,10 +61,9 @@ public class UniLinksPlugin implements FlutterPlugin, ActivityAware {
     this.activity = null;
   }
 
-  // Channel setup / teardown
   private void setupChannel(BinaryMessenger messenger) {
     channel = new MethodChannel(messenger, "uni_links/messages");
-    // setMethodCallHandler(...) -> plug in your method call handler if needed
+    channel.setMethodCallHandler(this);
   }
 
   private void tearDownChannel() {
@@ -74,5 +71,25 @@ public class UniLinksPlugin implements FlutterPlugin, ActivityAware {
       channel.setMethodCallHandler(null);
       channel = null;
     }
+  }
+
+  // Minimal method call handler — implement the original plugin methods here as needed.
+  @Override
+  public void onMethodCall(@NonNull MethodCall call, @NonNull Result result) {
+    switch (call.method) {
+      case "getInitialUri":
+        result.success(getInitialUriString());
+        break;
+      default:
+        result.notImplemented();
+    }
+  }
+
+  private String getInitialUriString() {
+    if (activity == null) return null;
+    Intent intent = activity.getIntent();
+    if (intent == null) return null;
+    Uri data = intent.getData();
+    return (data != null) ? data.toString() : null;
   }
 }
